@@ -7,7 +7,7 @@ function layout(m){$('pair').classList.toggle('hidden',m!=='pair');$('waiting').
 function transform(){x=Math.max(-stage.clientWidth*(zoom-1)/2,Math.min(stage.clientWidth*(zoom-1)/2,x));y=Math.max(-stage.clientHeight*(zoom-1)/2,Math.min(stage.clientHeight*(zoom-1)/2,y));const t='translate('+x+'px,'+y+'px) scale('+zoom+')';movie.style.transform=t;image.style.transform=t;}
 function magnify(value){zoom=Math.max(1,Math.min(4,value));if(zoom===1){x=0;y=0}transform();if(paired)link.send({type:'zoom',value:zoom});}
 let link=VISOR.connect(msg=>{
-  if(msg.type==='room'){$('code').textContent=msg.code.slice(0,4)+' '+msg.code.slice(4,8)+' '+msg.code.slice(8);layout('pair');$('connect').textContent='Waiting for computer…';}
+  if(msg.type==='room'){$('code').textContent=msg.code.slice(0,4)+' '+msg.code.slice(4,8)+' '+msg.code.slice(8);layout('pair');$('connect').textContent=msg.ready?'● Pairing ready. Enter this code on your computer.':'Code generated. Connecting to relay…';}
   else if(msg.type==='paired'){paired=true;layout('waiting');}
   else if(msg.type==='remote_stream'){
     movie.srcObject=msg.stream;movie.play().catch(()=>{});mediaReady=false;
@@ -17,7 +17,7 @@ let link=VISOR.connect(msg=>{
   else if(msg.type==='stop'){movie.pause();movie.srcObject=null;image.removeAttribute('src');mediaReady=false;layout('waiting');}
   else if(msg.type==='disconnected'){paired=false;mediaReady=false;layout('pair');}
   else if(msg.type==='error'){hint(msg.message||'Connection problem');}
-},state=>{ready=state==='online';if(ready){paired=false;mediaReady=false;layout('pair');link.send({type:'create'});}else{paired=false;layout('pair');$('connect').textContent='Reconnecting…';}});
+},state=>{ready=state==='online';if(ready){paired=false;mediaReady=false;layout('pair');$('connect').textContent='Connecting secure pairing channel…';}else{paired=false;layout('pair');$('connect').textContent='Relay unavailable. Retrying connection…';}});
 movie.addEventListener('playing',()=>{if(movie.videoWidth>0&&movie.videoHeight>0){mediaReady=true;clearTimeout(check);layout('movie');link.send({type:'video_confirmed'});}});
 function key(e){
   if($('pair').classList.contains('hidden')===false||$('waiting').classList.contains('hidden')===false)return;
@@ -34,3 +34,5 @@ stage.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;
 stage.addEventListener('pointerup',()=>drag=null);stage.addEventListener('pointercancel',()=>drag=null);
 window.addEventListener('resize',transform);window.addEventListener('pagehide',()=>link.close());
 layout('pair');
+// Display a code immediately, even before the relay responds.
+link.send({type:'create'});

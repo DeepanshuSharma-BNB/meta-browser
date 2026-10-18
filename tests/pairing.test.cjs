@@ -33,6 +33,7 @@ function readString(b,offset){
 }
 function mockBroker(opts={}){
   const peers=new Set();
+  const events=[];
   let dropped=false;
   class Socket{
     static OPEN=1;
@@ -49,7 +50,7 @@ function mockBroker(opts={}){
       }else if(type===8){
         const pid=payload.subarray(0,2);
         const {value}=readString(payload,2);
-        this.subscriptions.add(value);
+        this.subscriptions.add(value);events.push({type:'subscribe',topic:value});
         setImmediate(()=>this._deliver(packet(0x90,Buffer.concat([pid,Buffer.from([0])]))));
       }else if(type===3){
         const {value,next}=readString(payload,0);
@@ -58,6 +59,7 @@ function mockBroker(opts={}){
           return;
         }
         const data=payload.subarray(next);
+        events.push({type:'publish',topic:value,bytes:data.length,receivers:[...peers].filter(p=>p.subscriptions.has(value)).length});
         for(const p of peers){
           if(p.readyState===1 && p.subscriptions.has(value)){
             const outgoing=packet(0x30,Buffer.concat([stringField(value),data]));
@@ -75,7 +77,7 @@ function mockBroker(opts={}){
     }
     close(){this.readyState=3;this.onclose?.({});peers.delete(this);}
   }
-  return {Socket,wasJoinDropped:()=>dropped};
+  return {Socket,wasJoinDropped:()=>dropped,events};
 }
 function client(Socket,role){
   const messages=[],states=[];
@@ -109,7 +111,10 @@ async function pairingScenario(dropFirstJoin){
     await waitFor(()=>glasses.messages.some(m=>m.type==='room'&&m.ready));
     await waitFor(()=>computer.states.includes('online'));
     computer.api.send({type:'join',code:created.code});
-    await waitFor(()=>computer.messages.some(m=>m.type==='joined'),8000);
+    await waitFor(()=>computer.messages.some(m=>m.type==='joined'),8000).catch(e=>{
+      console.error('PAIR DEBUG',JSON.stringify({glass:glasses.messages.map(m=>({type:m.type,phase:m.phase,ready:m.ready})),computer:computer.messages.map(m=>({type:m.type,phase:m.phase,attempt:m.attempt,message:m.message})),gs:glasses.states,cs:computer.states,wire:broker.events},null,2));
+      throw e;
+    });
     await waitFor(()=>glasses.messages.some(m=>m.type==='paired'));
     assert.ok(computer.messages.some(m=>m.type==='pair_status'&&m.phase==='joining'));
     if(dropFirstJoin)assert.equal(broker.wasJoinDropped(),true);

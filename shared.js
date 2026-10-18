@@ -51,8 +51,12 @@ const VISOR = (() => {
     close(){this.closed=true;clearTimeout(this.retry);clearInterval(this.keep);if(this.ready)this.raw(packet(0xE0,new Uint8Array(0)));this.ws?.close();}
   }
 
-  function connect(onMessage,onState){
-    const isGlasses = /(^|\/)glasses\.html$/.test(location.pathname);
+  function connect(onMessage,onState,options={}){
+    // Simulators sometimes embed or rewrite the URL, so never infer the device
+    // role from pathname when the page supplies it explicitly.
+    const isGlasses = options.role==='glasses' ? true
+      : options.role==='computer' ? false
+      : /(^|\/)glasses\.html$/.test(location.pathname);
     let room=null, code='', connected=false, desiredCode='', pairTimer=null, seq=0,pairedAt=0;
     let sending=Promise.resolve(),directSending=Promise.resolve();let reassembly=new Map();let generation=0;let heartbeat=null,lastPong=0;
     let pc=null,dc=null,directReady=false,desiredStream=null;
@@ -179,7 +183,8 @@ const VISOR = (() => {
       paired=false;lastPong=0;
       // Generate the pairing code locally, even when the public MQTT relay is down.
       // The user should never be stuck waiting for a network handshake to see a code.
-      const pin=randomCode();
+      const pin=(typeof options.initialCode==='string' && /^[A-HJ-NP-Z2-9]{12}$/.test(options.initialCode))
+        ? options.initialCode : randomCode();
       code=pin;
       local({type:'room',code:pin,ready:false});
       if(connected)startRoom(pin,true,false).catch(handleError);

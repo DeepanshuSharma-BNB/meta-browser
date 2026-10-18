@@ -1,1 +1,26 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="mrbd-web-app-capable" content="yes"><meta name="theme-color" content="#000000"><meta name="description" content="View a computer Chrome tab in your Meta Ray-Ban Display"><title>Visor Browser | Glasses</title><link rel="stylesheet" href="styles.css"></head><body class="glasses"><main id="stage" class="viewer" tabindex="0" aria-label="Shared computer viewer"><video id="movie" class="feed hidden" autoplay muted playsinline></video><img id="image" class="feed hidden" alt="Shared computer screen snapshot"><section id="pair" class="pair-screen"><div class="symbol">⌁</div><div class="eyebrow">VISOR BROWSER / PAIR</div><h1 id="code">···· ···· ····</h1><p>Open the controller on your computer and enter this code.</p><p id="connect" class="quiet">Connecting…</p></section><section id="waiting" class="pair-screen hidden"><div class="symbol">⌁</div><div class="eyebrow">COMPUTER CONNECTED</div><p>Choose a Chrome tab or window on your computer.</p></section><div id="notice" class="notice hidden" role="status"></div></main><script src="shared.js?v=pairing-fix2"></script><script src="glasses.js?v=pairing-fix2"></script></body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="mrbd-web-app-capable" content="yes"><meta name="theme-color" content="#000000"><meta name="description" content="View a computer Chrome tab in your Meta Ray-Ban Display"><title>Visor Browser | Glasses</title><link rel="stylesheet" href="styles.css"></head><body class="glasses"><main id="stage" class="viewer" tabindex="0" aria-label="Shared computer viewer"><video id="movie" class="feed hidden" autoplay muted playsinline></video><img id="image" class="feed hidden" alt="Shared computer screen snapshot"><section id="pair" class="pair-screen"><div class="symbol">⌁</div><div class="eyebrow">VISOR BROWSER / PAIR</div><h1 id="code">···· ···· ····</h1><p>Open the controller on your computer and enter this code.</p><p id="connect" class="quiet">Connecting…</p></section><section id="waiting" class="pair-screen hidden"><div class="symbol">⌁</div><div class="eyebrow">COMPUTER CONNECTED</div><p>Choose a Chrome tab or window on your computer.</p></section><div id="notice" class="notice hidden" role="status"></div></main><script>
+(function(){
+  // Draw a secure pairing code before loading any external script.
+  // This still runs inside a simulator iframe even if it rewrites the URL.
+  const status=document.getElementById('connect');
+  const display=document.getElementById('code');
+  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  try{
+    if(!window.crypto||!crypto.getRandomValues)throw Error('Secure random not supported');
+    const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
+    const code=Array.from(bytes,b=>alphabet[b%alphabet.length]).join('');
+    window.__visorBrowserPairCode=code;
+    display.textContent=code.match(/.{4}/g).join(' ');
+    status.textContent='Pairing code ready. Connecting to server…';
+  }catch(error){
+    status.textContent='Secure pairing unavailable in this browser: '+error.message;
+  }
+  setTimeout(function(){
+    if(!window.__visorBrowserStarted)
+      status.textContent='Viewer script did not start. Open the GitHub Pages link directly or refresh this simulator.';
+  },5000);
+})();
+</script>
+<noscript><p style="text-align:center;color:#fff">JavaScript is required for pairing.</p></noscript>
+<script src="shared.js?v=pairing-fix3" onerror="document.getElementById('connect').textContent='Unable to load shared.js. Open the app directly.'"></script>
+<script src="glasses.js?v=pairing-fix3" onerror="document.getElementById('connect').textContent='Unable to load glasses.js. Open the app directly.'"></script></body></html>

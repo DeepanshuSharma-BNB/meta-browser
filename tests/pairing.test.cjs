@@ -83,6 +83,7 @@ function client(Socket,role){
   const messages=[],states=[];
   const context=vm.createContext({
     crypto:webcrypto,TextEncoder,TextDecoder,WebSocket:Socket,Blob,
+    btoa:(text)=>Buffer.from(text,'binary').toString('base64'),
     setInterval,clearInterval,setTimeout,clearTimeout,
     location:{pathname:role==='glasses'?'/meta-browser/glasses.html':'/meta-browser/computer.html'},
     console

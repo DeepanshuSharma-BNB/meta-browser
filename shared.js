@@ -149,7 +149,7 @@ const VISOR = (() => {
       if(code!==pin){if(room)wire.unsubscribe(room.topic+(asGlasses?'/glasses':'/phone'));resetRTC();pendingIce=[];reassembly.clear();pendingDirect.clear();seen.clear();paired=false;pairedAt=0;}
       code=pin;room=config;const incoming=config.topic+(asGlasses?'/glasses':'/phone');const ok=await wire.subscribe(incoming);if(myGen!==generation)return;
       if(!ok){handleError(new Error('Relay subscription failed. Retry loading the page.'));return;}
-      if(asGlasses){local({type:'room',code:pin});}
+      if(asGlasses){local({type:'room',code:pin,ready:true});}
       else {queue({type:'join'});clearTimeout(pairTimer);pairTimer=setTimeout(()=>{if(!paired)handleError(new Error('No glasses response. Check the code and keep the glasses app open.'));},11000);}
     }
     async function receive(topic,payload){const current=room;if(!current)return;if(topic!==current.topic+(isGlasses?'/glasses':'/phone'))return;
@@ -175,7 +175,16 @@ const VISOR = (() => {
     }
     heartbeat=setInterval(()=>{if(connected&&room&&paired){if(Date.now()-pairedAt>30*60*1000){paired=false;pairedAt=0;resetRTC();if(isGlasses)startRoom(randomCode(),true,false).catch(handleError);else local({type:'disconnected'});return;}queue({type:'ping'});if(lastPong && Date.now()-lastPong>23000){paired=false;local({type:'disconnected'});}}},6000);
     async function sendStream(stream){if(isGlasses)throw Error('Only the computer can share a screen');desiredStream=stream;if(!paired)return;/* A fresh offer avoids renegotiation while an earlier data-only offer is pending. */await createRTC(true);}
-    function send(msg){if(msg.type==='create'&&isGlasses){if(!connected)return;paired=false;lastPong=0;startRoom(randomCode(),true,false).catch(handleError);return;}
+    function send(msg){if(msg.type==='create'&&isGlasses){
+      paired=false;lastPong=0;
+      // Generate the pairing code locally, even when the public MQTT relay is down.
+      // The user should never be stuck waiting for a network handshake to see a code.
+      const pin=randomCode();
+      code=pin;
+      local({type:'room',code:pin,ready:false});
+      if(connected)startRoom(pin,true,false).catch(handleError);
+      return;
+    }
       if(msg.type==='join'&&!isGlasses){desiredCode=(msg.code||'').toUpperCase();if(!connected)return;paired=false;lastPong=0;startRoom(desiredCode,false,false).catch(handleError);return;}
       if(!paired)return;
       if(!['offer','answer','ice','ping','pong','join','joined'].includes(msg.type)&&sendDirect(msg))return;

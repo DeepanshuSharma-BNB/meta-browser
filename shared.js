@@ -174,7 +174,7 @@ const VISOR = (() => {
       if(reassembly.size>40){for(const [key,val] of reassembly)if(Date.now()-val.at>120000)reassembly.delete(key);}
     }
     heartbeat=setInterval(()=>{if(connected&&room&&paired){if(Date.now()-pairedAt>30*60*1000){paired=false;pairedAt=0;resetRTC();if(isGlasses)startRoom(randomCode(),true,false).catch(handleError);else local({type:'disconnected'});return;}queue({type:'ping'});if(lastPong && Date.now()-lastPong>23000){paired=false;local({type:'disconnected'});}}},6000);
-    async function sendStream(stream){if(isGlasses)throw Error('Only the computer can share a screen');desiredStream=stream;if(!paired)return;if(!pc){await createRTC(true);return;}for(const sender of pc.getSenders())if(sender.track?.kind==='video')pc.removeTrack(sender);for(const track of stream.getTracks())pc.addTrack(track,stream);await pc.setLocalDescription(await pc.createOffer());queue({type:'offer',sdp:pc.localDescription.toJSON()});}
+    async function sendStream(stream){if(isGlasses)throw Error('Only the computer can share a screen');desiredStream=stream;if(!paired)return;/* A fresh offer avoids renegotiation while an earlier data-only offer is pending. */await createRTC(true);}
     function send(msg){if(msg.type==='create'&&isGlasses){if(!connected)return;paired=false;lastPong=0;startRoom(randomCode(),true,false).catch(handleError);return;}
       if(msg.type==='join'&&!isGlasses){desiredCode=(msg.code||'').toUpperCase();if(!connected)return;paired=false;lastPong=0;startRoom(desiredCode,false,false).catch(handleError);return;}
       if(!paired)return;

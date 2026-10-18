@@ -57,7 +57,7 @@ const VISOR = (() => {
     const isGlasses = options.role==='glasses' ? true
       : options.role==='computer' ? false
       : /(^|\/)glasses\.html$/.test(location.pathname);
-    let room=null, code='', connected=false, desiredCode='', pairTimer=null, seq=0,pairedAt=0;
+    let room=null, code='', connected=false, desiredCode='', pairTimer=null, joinTimer=null, seq=0,pairedAt=0,joining=false;
     let sending=Promise.resolve(),directSending=Promise.resolve();let reassembly=new Map();let generation=0;let heartbeat=null,lastPong=0;
     let pc=null,dc=null,directReady=false,desiredStream=null;
     let pendingIce=[];
@@ -130,8 +130,32 @@ const VISOR = (() => {
       return true;
     }
     const handleError = error => onMessage({type:'error',message:error?.message||'Connection failed'});
+    function stopJoinRetry(){
+      clearInterval(joinTimer);joinTimer=null;
+      clearTimeout(pairTimer);pairTimer=null;
+    }
+    function startJoinRetry(){
+      stopJoinRetry();
+      joining=true;
+      let attempts=0;
+      const repeat=()=>{
+        if(paired||!connected||!room)return;
+        attempts++;
+        queue({type:'join'});
+        local({type:'pair_status',phase:'joining',attempt:attempts});
+      };
+      repeat();
+      joinTimer=setInterval(repeat,1800);
+      pairTimer=setTimeout(()=>{
+        if(!paired){
+          joining=false;stopJoinRetry();
+          local({type:'pair_timeout',message:'No response from glasses after 20 seconds. On glasses, check whether it says "Pairing ready". If it only says "Connecting to relay", test the glasses URL directly outside the simulator.'});
+        }
+      },20000);
+    }
     const wire = new MqttConnection(receive, state => {
       connected=state==='online';onState(state);
+      if(state==='offline'&&joining&&!paired)local({type:'pair_status',phase:'relay_offline'});
       if(connected&&code){const old=code;startRoom(old,isGlasses,true).catch(handleError);}
       else if(connected && !isGlasses && desiredCode){startRoom(desiredCode,false,true).catch(handleError);}
     });
@@ -152,9 +176,13 @@ const VISOR = (() => {
       const myGen=++generation;const config=await roomConfig(pin);if(myGen!==generation)return;
       if(code!==pin){if(room)wire.unsubscribe(room.topic+(asGlasses?'/glasses':'/phone'));resetRTC();pendingIce=[];reassembly.clear();pendingDirect.clear();seen.clear();paired=false;pairedAt=0;}
       code=pin;room=config;const incoming=config.topic+(asGlasses?'/glasses':'/phone');const ok=await wire.subscribe(incoming);if(myGen!==generation)return;
-      if(!ok){handleError(new Error('Relay subscription failed. Retry loading the page.'));return;}
+      if(!ok){
+        local({type:'pair_status',phase:'subscribe_failed'});
+        handleError(new Error('Could not subscribe to the pairing relay. Retry loading both pages.'));
+        return;
+      }
       if(asGlasses){local({type:'room',code:pin,ready:true});}
-      else {queue({type:'join'});clearTimeout(pairTimer);pairTimer=setTimeout(()=>{if(!paired)handleError(new Error('No glasses response. Check the code and keep the glasses app open.'));},11000);}
+      else {startJoinRetry();}
     }
     async function receive(topic,payload){const current=room;if(!current)return;if(topic!==current.topic+(isGlasses?'/glasses':'/phone'))return;
       let envelope;try{envelope=await unseal(current.key,payload);}catch{return;}if(current!==room)return;
@@ -168,8 +196,17 @@ const VISOR = (() => {
       if(partial.received===count){reassembly.delete(sid);let msg;try{msg=JSON.parse(partial.parts.join(''));}catch{return;}
         if(seen.has(sid))return;seen.set(sid,Date.now());
         if(seen.size>400){for(const [k,t] of seen)if(Date.now()-t>180000)seen.delete(k);}
-        if(msg.type==='join'&&isGlasses){paired=true;pairedAt=Date.now();local({type:'paired'});queue({type:'joined',code});}
-        else if(msg.type==='joined'&&!isGlasses){paired=true;pairedAt=Date.now();clearTimeout(pairTimer);local(msg);createRTC(true).catch(handleError);}
+        if(msg.type==='join'&&isGlasses){
+          if(!paired){paired=true;pairedAt=Date.now();local({type:'paired'});}
+          // Each join retry gets a fresh acknowledgement, allowing recovery if
+          // the first acknowledgement is lost on a transient broker connection.
+          queue({type:'joined',code});
+        }
+        else if(msg.type==='joined'&&!isGlasses){
+          const first=!paired;
+          paired=true;joining=false;pairedAt=Date.now();stopJoinRetry();
+          if(first){local(msg);createRTC(true).catch(handleError);}
+        }
         else if(msg.type==='ping'){queue({type:'pong'});}
         else if(msg.type==='pong'){lastPong=Date.now();}
         else if(paired&&['offer','answer','ice'].includes(msg.type)){rtcSignal(msg);}
@@ -190,12 +227,21 @@ const VISOR = (() => {
       if(connected)startRoom(pin,true,false).catch(handleError);
       return;
     }
-      if(msg.type==='join'&&!isGlasses){desiredCode=(msg.code||'').toUpperCase();if(!connected)return;paired=false;lastPong=0;startRoom(desiredCode,false,false).catch(handleError);return;}
+      if(msg.type==='join'&&!isGlasses){
+        desiredCode=(msg.code||'').replace(/\s+/g,'').toUpperCase();
+        if(!/^[A-HJ-NP-Z2-9]{12}$/.test(desiredCode)){
+          local({type:'pair_status',phase:'invalid_code'});return;
+        }
+        paired=false;joining=true;lastPong=0;stopJoinRetry();
+        if(!connected){local({type:'pair_status',phase:'relay_offline'});return;}
+        local({type:'pair_status',phase:'deriving_key'});
+        startRoom(desiredCode,false,false).catch(handleError);return;
+      }
       if(!paired)return;
       if(!['offer','answer','ice','ping','pong','join','joined'].includes(msg.type)&&sendDirect(msg))return;
       queue(msg);
     }
-    return {send,sendStream,get directReady(){return directReady;},close(){resetRTC();clearInterval(heartbeat);clearTimeout(pairTimer);wire.close();}};
+    return {send,sendStream,get directReady(){return directReady;},close(){resetRTC();joining=false;stopJoinRetry();clearInterval(heartbeat);wire.close();}};
   }
   return {connect,$};
 })();

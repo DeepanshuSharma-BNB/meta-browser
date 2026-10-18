@@ -17,7 +17,7 @@ let link=VISOR.connect(msg=>{
   else if(msg.type==='stop'){movie.pause();movie.srcObject=null;image.removeAttribute('src');mediaReady=false;layout('waiting');}
   else if(msg.type==='disconnected'){paired=false;mediaReady=false;layout('pair');}
   else if(msg.type==='error'){hint(msg.message||'Connection problem');}
-},state=>{ready=state==='online';if(ready){paired=false;mediaReady=false;layout('pair');$('connect').textContent='Connecting secure pairing channel…';}else{paired=false;layout('pair');$('connect').textContent='Relay unavailable. Retrying connection…';}});
+},state=>{ready=state==='online';if(ready){paired=false;mediaReady=false;layout('pair');$('connect').textContent='Connecting secure pairing channel…';}else{paired=false;layout('pair');$('connect').textContent='Relay unavailable. Retrying connection…';}}, {role:'glasses',initialCode:window.__visorBrowserPairCode});
 movie.addEventListener('playing',()=>{if(movie.videoWidth>0&&movie.videoHeight>0){mediaReady=true;clearTimeout(check);layout('movie');link.send({type:'video_confirmed'});}});
 function key(e){
   if($('pair').classList.contains('hidden')===false||$('waiting').classList.contains('hidden')===false)return;
@@ -36,3 +36,5 @@ window.addEventListener('resize',transform);window.addEventListener('pagehide',(
 layout('pair');
 // Display a code immediately, even before the relay responds.
 link.send({type:'create'});
+
+window.__visorBrowserStarted = true;

@@ -11,7 +11,7 @@ let link=VISOR.connect(msg=>{
   else if(msg.type==='needs_frames'){startSnapshots();}
   else if(msg.type==='zoom'){note('Glasses zoom: '+msg.value.toFixed(1)+'×');}
   else if(msg.type==='error'){note(msg.message);}
-},state=>{ready=state==='online';if(!ready){paired=false;stop(false);label('○ Relay offline')}else label('● Ready to pair');$('pair').disabled=!ready||paired;setButtons()});
+},state=>{ready=state==='online';if(!ready){paired=false;stop(false);label('○ Relay offline')}else label('● Ready to pair');$('pair').disabled=!ready||paired;setButtons()}, {role:'computer'});
 $('pair-form').onsubmit=e=>{e.preventDefault();link.send({type:'join',code:$('pin').value.toUpperCase().replace(/[^A-Z2-9]/g,'')});label('Pairing…');};
 $('share').onclick=async()=>{
   if(!paired)return;

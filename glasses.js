@@ -16,8 +16,28 @@ let link=VISOR.connect(msg=>{
   else if(msg.type==='frame'&&typeof msg.data==='string'&&msg.data.startsWith('data:image/jpeg;base64,')&&!mediaReady){image.src=msg.data;layout('image');}
   else if(msg.type==='stop'){movie.pause();movie.srcObject=null;image.removeAttribute('src');mediaReady=false;layout('waiting');}
   else if(msg.type==='disconnected'){paired=false;mediaReady=false;layout('pair');}
-  else if(msg.type==='error'){hint(msg.message||'Connection problem');}
-},state=>{ready=state==='online';if(ready){paired=false;mediaReady=false;layout('pair');$('connect').textContent='Connecting secure pairing channel…';}else{paired=false;layout('pair');$('connect').textContent='Relay unavailable. Retrying connection…';}}, {role:'glasses',initialCode:window.__visorBrowserPairCode});
+  else if(msg.type==='error'){
+    const problem=msg.message||'Connection problem';
+    hint(problem);
+    if(!paired)$('connect').textContent='Pairing unavailable: '+problem;
+  }
+  else if(msg.type==='pair_status'){
+    if(msg.phase==='subscribe_failed')$('connect').textContent='Could not subscribe to relay. Reload this page.';
+  }
+},state=>{
+  ready=state==='online';
+  if(!window.crypto?.subtle){
+    $('connect').textContent='Secure Web Crypto unavailable here. Open the glasses URL directly in a browser, outside this simulator.';
+    return;
+  }
+  if(ready){
+    paired=false;mediaReady=false;layout('pair');
+    $('connect').textContent='Relay connected. Preparing encrypted pairing…';
+  }else{
+    paired=false;layout('pair');
+    $('connect').textContent='Relay unavailable. Retrying… Try opening the glasses URL directly if this persists.';
+  }
+}, {role:'glasses',initialCode:window.__visorBrowserPairCode});
 movie.addEventListener('playing',()=>{if(movie.videoWidth>0&&movie.videoHeight>0){mediaReady=true;clearTimeout(check);layout('movie');link.send({type:'video_confirmed'});}});
 function key(e){
   if($('pair').classList.contains('hidden')===false||$('waiting').classList.contains('hidden')===false)return;
@@ -36,5 +56,7 @@ window.addEventListener('resize',transform);window.addEventListener('pagehide',(
 layout('pair');
 // Display a code immediately, even before the relay responds.
 link.send({type:'create'});
+if(!window.crypto?.subtle)
+  $('connect').textContent='Secure Web Crypto unavailable. The simulator may be restricting browser APIs. Open this page directly.';
 
 window.__visorBrowserStarted = true;
